@@ -3,11 +3,11 @@
   ---------------------------------------------------------
   Qué hace este script:
   1. Recibe pedidos desde la web por POST.
-  2. Guarda el resumen del pedido en la hoja 'Pedidos'.
-  3. Guarda cada producto en la hoja 'DetalleProductos'.
+  2. Guarda el resumen del pedido en la hoja "Pedidos".
+  3. Guarda cada producto en la hoja "DetalleProductos".
   4. Agrega costos referenciales, ganancia y margen para contabilidad básica.
-  5. Envía correo de confirmación profesional al cliente.
-  6. Envía correo de aviso al dueño de la tienda.
+  5. Envía correo de confirmación profesional al cliente usando MailApp.
+  6. Envía correo de aviso al dueño de la tienda usando MailApp.
 */
 
 const OWNER_EMAIL = 'fernandodaniel8888@gmail.com';
@@ -15,7 +15,6 @@ const STORE_NAME = 'NostraShop Perú';
 const SHEET_NAME = 'Pedidos';
 const DETAIL_SHEET_NAME = 'DetalleProductos';
 
-// Costos referenciales de prueba. Luego los cambiaremos por costos reales del proveedor.
 const PRODUCT_COSTS = {
   'organizador-cocina-001': { cost: 35, supplier: 'Proveedor referencial A' },
   'limpiador-electrico-002': { cost: 45, supplier: 'Proveedor referencial B' },
@@ -89,12 +88,15 @@ function doPost(e) {
       productsCount: normalized.productsCount,
       totalProfit: normalized.totalProfit
     });
+
   } catch (error) {
     console.error(error);
+
     return jsonResponse({
       ok: false,
       message: error.message || 'Error al registrar pedido'
     });
+
   } finally {
     try {
       lock.releaseLock();
@@ -105,9 +107,11 @@ function doPost(e) {
 function validateOrder(order) {
   if (!order) throw new Error('Pedido vacío.');
   if (!order.customer) throw new Error('Faltan datos del cliente.');
+
   if (!order.items || !Array.isArray(order.items) || order.items.length === 0) {
     throw new Error('El pedido no tiene productos.');
   }
+
   if (!order.totals) throw new Error('Faltan totales del pedido.');
 }
 
@@ -116,9 +120,23 @@ function getOrCreateOrdersSheet_(ss) {
   if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
 
   const headers = [
-    'Fecha', 'ID Pedido', 'Nombre', 'Celular', 'Correo', 'Ciudad', 'Dirección',
-    'Método de pago', 'Productos', 'Subtotal', 'Envío', 'Total venta', 'Costo total',
-    'Ganancia total', 'Margen %', 'Estado', 'Observaciones'
+    'Fecha',
+    'ID Pedido',
+    'Nombre',
+    'Celular',
+    'Correo',
+    'Ciudad',
+    'Dirección',
+    'Método de pago',
+    'Productos',
+    'Subtotal',
+    'Envío',
+    'Total venta',
+    'Costo total',
+    'Ganancia total',
+    'Margen %',
+    'Estado',
+    'Observaciones'
   ];
 
   ensureHeaders_(sheet, headers);
@@ -130,10 +148,23 @@ function getOrCreateDetailsSheet_(ss) {
   if (!sheet) sheet = ss.insertSheet(DETAIL_SHEET_NAME);
 
   const headers = [
-    'Fecha', 'ID Pedido', 'Cliente', 'Celular', 'Correo', 'Producto', 'Cantidad',
-    'Precio unitario', 'Total venta producto', 'Costo unitario ref.', 'Costo total ref.',
-    'Ganancia unitaria ref.', 'Ganancia total ref.', 'Margen producto %', 'Proveedor ref.',
-    'Método de pago', 'Estado'
+    'Fecha',
+    'ID Pedido',
+    'Cliente',
+    'Celular',
+    'Correo',
+    'Producto',
+    'Cantidad',
+    'Precio unitario',
+    'Total venta producto',
+    'Costo unitario ref.',
+    'Costo total ref.',
+    'Ganancia unitaria ref.',
+    'Ganancia total ref.',
+    'Margen producto %',
+    'Proveedor ref.',
+    'Método de pago',
+    'Estado'
   ];
 
   ensureHeaders_(sheet, headers);
@@ -157,6 +188,7 @@ function appendProductDetails_(sheet, order) {
     const qty = Number(item.qty || 1);
     const price = Number(item.price || 0);
     const productInfo = getProductCostInfo_(item);
+
     const unitCost = productInfo.cost;
     const totalSale = qty * price;
     const totalCost = qty * unitCost;
@@ -165,37 +197,60 @@ function appendProductDetails_(sheet, order) {
     const marginPercent = totalSale > 0 ? totalProfit / totalSale : 0;
 
     return [
-      order.createdAt, order.orderId, order.name, order.phone, order.email,
-      item.name || 'Producto', qty, price, totalSale, unitCost, totalCost,
-      unitProfit, totalProfit, marginPercent, productInfo.supplier, order.payment, 'Nuevo'
+      order.createdAt,
+      order.orderId,
+      order.name,
+      order.phone,
+      order.email,
+      item.name || 'Producto',
+      qty,
+      price,
+      totalSale,
+      unitCost,
+      totalCost,
+      unitProfit,
+      totalProfit,
+      marginPercent,
+      productInfo.supplier,
+      order.payment,
+      'Nuevo'
     ];
   });
 
   if (rows.length > 0) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+    sheet
+      .getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length)
+      .setValues(rows);
   }
 }
 
 function getProductCostInfo_(item) {
   const id = item.id || '';
   const name = item.name || '';
-  return PRODUCT_COSTS[id] || PRODUCT_COSTS_BY_NAME[name] || { cost: 0, supplier: 'Sin proveedor asignado' };
+
+  return PRODUCT_COSTS[id] ||
+         PRODUCT_COSTS_BY_NAME[name] ||
+         { cost: 0, supplier: 'Sin proveedor asignado' };
 }
 
 function formatOrdersLastRow_(sheet) {
   const lastRow = sheet.getLastRow();
+
   sheet.getRange(lastRow, 1, 1, 17).setVerticalAlignment('middle');
   sheet.getRange(lastRow, 9).setWrap(true);
   sheet.getRange(lastRow, 10, 1, 5).setNumberFormat('S/ #,##0.00');
   sheet.getRange(lastRow, 15).setNumberFormat('0.00%');
-  sheet.setColumnWidth(9, 420);
+
   sheet.setColumnWidth(7, 230);
+  sheet.setColumnWidth(9, 420);
+
   sheet.autoResizeColumns(1, 8);
   sheet.autoResizeColumns(10, 8);
 }
 
 function formatDetailsSheet_(sheet) {
   const lastRow = sheet.getLastRow();
+
   if (lastRow > 1) {
     sheet.getRange(2, 8, lastRow - 1, 6).setNumberFormat('S/ #,##0.00');
     sheet.getRange(2, 14, lastRow - 1, 1).setNumberFormat('0.00%');
@@ -206,6 +261,7 @@ function formatDetailsSheet_(sheet) {
   sheet.setColumnWidth(5, 230);
   sheet.setColumnWidth(6, 260);
   sheet.setColumnWidth(15, 220);
+
   sheet.autoResizeColumns(1, 17);
 }
 
@@ -222,6 +278,7 @@ function normalizeOrder_(order) {
     const qty = Number(item.qty || 1);
     const price = Number(item.price || 0);
     const productInfo = getProductCostInfo_(item);
+
     const lineTotal = price * qty;
     const lineCost = productInfo.cost * qty;
     const lineProfit = lineTotal - lineCost;
@@ -260,25 +317,31 @@ function sendCustomerEmail_(order) {
   if (!order.email) return;
 
   const subject = `Confirmación de pedido ${order.orderId} - ${STORE_NAME}`;
+
   const customerItemsText = order.items.map((item, index) => {
     const qty = Number(item.qty || 1);
     const price = Number(item.price || 0);
+
     return `${index + 1}. ${item.name || 'Producto'} x${qty} - S/ ${(price * qty).toFixed(2)}`;
   }).join('\n');
 
-  const plainBody = `Hola ${order.name || 'cliente'},\n\n` +
+  const plainBody =
+    `Hola ${order.name || 'cliente'},\n\n` +
     `Gracias por comprar en ${STORE_NAME}. Hemos recibido tu pedido.\n\n` +
     `ID de pedido: ${order.orderId}\n` +
     `Productos:\n${customerItemsText}\n` +
     `Total: S/ ${order.total.toFixed(2)}\n` +
     `Método de pago: ${order.payment}\n\n` +
-    `Datos de entrega:\nCiudad: ${order.city}\nDirección: ${order.address}\nCelular: ${order.phone}\n\n` +
+    `Datos de entrega:\n` +
+    `Ciudad: ${order.city}\n` +
+    `Dirección: ${order.address}\n` +
+    `Celular: ${order.phone}\n\n` +
     `Siguiente paso: validaremos el pago y coordinaremos la preparación del pedido.\n\n` +
     `${STORE_NAME}`;
 
   const htmlBody = buildCustomerHtmlEmail_(order);
 
-  GmailApp.sendEmail(order.email, subject, plainBody, {
+  MailApp.sendEmail(order.email, subject, plainBody, {
     name: STORE_NAME,
     htmlBody: htmlBody,
     replyTo: OWNER_EMAIL
@@ -290,11 +353,18 @@ function buildCustomerHtmlEmail_(order) {
     const qty = Number(item.qty || 1);
     const price = Number(item.price || 0);
     const lineTotal = price * qty;
+
     return `
       <tr>
-        <td style="padding:12px;border-bottom:1px solid #e5e7eb;color:#111827;">${escapeHtml_(item.name || 'Producto')}</td>
-        <td style="padding:12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">${qty}</td>
-        <td style="padding:12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">S/ ${lineTotal.toFixed(2)}</td>
+        <td style="padding:12px;border-bottom:1px solid #e5e7eb;color:#111827;">
+          ${escapeHtml_(item.name || 'Producto')}
+        </td>
+        <td style="padding:12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">
+          ${qty}
+        </td>
+        <td style="padding:12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">
+          S/ ${lineTotal.toFixed(2)}
+        </td>
       </tr>`;
   }).join('');
 
@@ -308,7 +378,11 @@ function buildCustomerHtmlEmail_(order) {
 
       <div style="background:#ffffff;border-radius:0 0 22px 22px;padding:26px;border:1px solid #e5e7eb;border-top:0;">
         <h2 style="margin:0 0 10px;font-size:22px;color:#111827;">¡Pedido recibido correctamente!</h2>
-        <p style="margin:0 0 18px;line-height:1.6;color:#374151;">Hola <strong>${escapeHtml_(order.name || 'cliente')}</strong>, gracias por tu compra. Hemos registrado tu pedido y pronto continuaremos con la validación del pago y la coordinación de entrega.</p>
+
+        <p style="margin:0 0 18px;line-height:1.6;color:#374151;">
+          Hola <strong>${escapeHtml_(order.name || 'cliente')}</strong>, gracias por tu compra.
+          Hemos registrado tu pedido y pronto continuaremos con la validación del pago y la coordinación de entrega.
+        </p>
 
         <div style="background:#ecfeff;border:1px solid #bae6fd;border-radius:16px;padding:16px;margin:18px 0;">
           <div style="font-size:13px;color:#0369a1;font-weight:700;">ID DE PEDIDO</div>
@@ -341,7 +415,9 @@ function buildCustomerHtmlEmail_(order) {
           </div>
         </div>
 
-        <p style="margin:22px 0 0;line-height:1.6;color:#6b7280;font-size:13px;">Este correo fue generado automáticamente por ${STORE_NAME}. Si necesitas corregir algún dato, responde a este mismo correo.</p>
+        <p style="margin:22px 0 0;line-height:1.6;color:#6b7280;font-size:13px;">
+          Este correo fue generado automáticamente por ${STORE_NAME}. Si necesitas corregir algún dato, responde a este mismo correo.
+        </p>
       </div>
     </div>
   </div>`;
@@ -360,7 +436,9 @@ function sendOwnerEmail_(order) {
   if (!OWNER_EMAIL) return;
 
   const subject = `Nueva venta web: ${order.orderId}`;
-  const body = `Nuevo pedido recibido desde la web.\n\n` +
+
+  const body =
+    `Nuevo pedido recibido desde la web.\n\n` +
     `ID: ${order.orderId}\n` +
     `Cliente: ${order.name}\n` +
     `Celular: ${order.phone}\n` +
@@ -375,11 +453,64 @@ function sendOwnerEmail_(order) {
     `Margen ref.: ${(order.marginPercent * 100).toFixed(2)}%\n\n` +
     `Estado inicial: Nuevo`;
 
-  GmailApp.sendEmail(OWNER_EMAIL, subject, body, { name: STORE_NAME });
+  MailApp.sendEmail(OWNER_EMAIL, subject, body, {
+    name: STORE_NAME
+  });
 }
 
 function jsonResponse(payload) {
   return ContentService
     .createTextOutput(JSON.stringify(payload))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function testEmail() {
+  MailApp.sendEmail(
+    OWNER_EMAIL,
+    'Prueba de correo NostraShop',
+    'Si recibes este correo, MailApp está funcionando correctamente.',
+    {
+      name: STORE_NAME
+    }
+  );
+}
+
+function testPedidoCompleto() {
+  const order = {
+    createdAt: new Date(),
+    orderId: 'TEST-' + Date.now(),
+    name: 'Daniel Prueba',
+    phone: '999999999',
+    email: OWNER_EMAIL,
+    city: 'Lima',
+    address: 'Dirección de prueba',
+    payment: 'link-pago',
+    items: [
+      {
+        id: 'organizador-cocina-001',
+        name: 'Organizador plegable multiuso',
+        qty: 1,
+        price: 79
+      },
+      {
+        id: 'limpiador-electrico-002',
+        name: 'Cepillo limpiador eléctrico',
+        qty: 1,
+        price: 99
+      }
+    ],
+    itemsText:
+      '1. Organizador plegable multiuso x1 - S/ 79.00\n' +
+      '2. Cepillo limpiador eléctrico x1 - S/ 99.00',
+    productsCount: 2,
+    subtotal: 178,
+    shipping: 0,
+    total: 178,
+    totalCost: 80,
+    totalProfit: 98,
+    marginPercent: 98 / 178
+  };
+
+  sendCustomerEmail_(order);
+  sendOwnerEmail_(order);
 }
