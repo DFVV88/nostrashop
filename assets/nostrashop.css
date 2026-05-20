@@ -1,0 +1,61 @@
+/* NostraShop - mejoras externas del carrito */
+
+.drawer-backdrop{
+  display:none;
+  position:fixed;
+  inset:0;
+  background:rgba(2,6,23,.78);
+  z-index:80;
+  backdrop-filter:blur(10px);
+}
+
+.drawer-backdrop.open{
+  display:block;
+}
+
+.drawer{
+  position:fixed !important;
+  top:50% !important;
+  left:50% !important;
+  right:auto !important;
+  width:min(560px,94vw) !important;
+  max-height:88vh !important;
+  height:auto !important;
+  color:#fff;
+  background:rgba(2,6,23,.97) !important;
+  border:1px solid var(--line) !important;
+  border-radius:30px !important;
+  z-index:90;
+  transform:translate(-50%,-45%) scale(.96) !important;
+  opacity:0 !important;
+  pointer-events:none !important;
+  transition:.22s ease !important;
+  padding:24px !important;
+  overflow:auto !important;
+  box-shadow:0 30px 110px rgba(0,0,0,.62),var(--glow) !important;
+  backdrop-filter:blur(20px) !important;
+}
+
+.drawer.open{
+  transform:translate(-50%,-50%) scale(1) !important;
+  opacity:1 !important;
+  pointer-events:auto !important;
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.add-button:disabled{
+  opacity:.55 !important;
+  cursor:not-allowed !important;
+  filter:grayscale(.35) !important;
+  transform:none !important;
+  box-shadow:none !important;
+}
+
+@media(max-width:940px){
+  .drawer{
+    width:94vw !important;
+    max-height:90vh !important;
+    padding:18px !important;
+  }
+}
