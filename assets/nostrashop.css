@@ -212,6 +212,55 @@
   line-height:1.4 !important;
 }
 
+/* Botón para actualizar catálogo desde Google Sheets */
+.catalog-refresh-button{
+  position:relative !important;
+  overflow:hidden !important;
+  gap:8px !important;
+  border-color:rgba(34,211,238,.34) !important;
+  background:
+    linear-gradient(135deg,rgba(34,211,238,.14),rgba(168,85,247,.14)),
+    rgba(15,23,42,.84) !important;
+  color:#e0f2fe !important;
+}
+
+.catalog-refresh-button::before{
+  content:'';
+  position:absolute;
+  inset:-80%;
+  background:conic-gradient(from 180deg,transparent,rgba(34,211,238,.28),transparent,rgba(168,85,247,.24),transparent);
+  opacity:0;
+  transition:.22s ease;
+}
+
+.catalog-refresh-button:hover::before{
+  opacity:1;
+  animation:nostraSpin 1.8s linear infinite;
+}
+
+.catalog-refresh-button span{
+  position:relative;
+  z-index:1;
+}
+
+.catalog-refresh-button.loading{
+  pointer-events:none !important;
+  opacity:.85 !important;
+}
+
+.catalog-refresh-button.loading::after{
+  content:'';
+  width:16px;
+  height:16px;
+  margin-left:8px;
+  border:3px solid rgba(255,255,255,.24);
+  border-top-color:#67e8f9;
+  border-radius:999px;
+  display:inline-block;
+  vertical-align:middle;
+  animation:nostraSpin .75s linear infinite;
+}
+
 @keyframes nostraSpin{
   to{transform:rotate(360deg)}
 }
@@ -242,5 +291,9 @@
 
   #checkoutForm{
     padding:15px !important;
+  }
+
+  .catalog-refresh-button{
+    width:100% !important;
   }
 }
