@@ -1,20 +1,13 @@
 /*
   NostraShop Perú - Backend gratuito con Google Apps Script
   ---------------------------------------------------------
-  Qué hace este script:
+  Versión mejorada:
   1. Recibe pedidos desde la web por POST.
   2. Crea automáticamente la hoja 'Pedidos' si no existe.
   3. Guarda el pedido en Google Sheets.
-  4. Envía correo de confirmación al cliente.
-  5. Envía correo de aviso al dueño de la tienda.
-
-  Uso:
-  - Crea una hoja de cálculo en Google Sheets llamada 'Pedidos NostraShop'.
-  - Abre Extensiones > Apps Script.
-  - Pega este código.
-  - Cambia OWNER_EMAIL si deseas recibir avisos en otro correo.
-  - Implementa como aplicación web con acceso: Cualquier persona.
-  - Copia la URL /exec y pégala en CONFIG.orderWebhookUrl del index.html.
+  4. Evita registrar dos veces el mismo ID de pedido.
+  5. Envía correo de confirmación al cliente.
+  6. Envía correo de aviso al dueño de la tienda.
 */
 
 const OWNER_EMAIL = 'fernandodaniel8888@gmail.com';
@@ -29,8 +22,9 @@ function doGet() {
 }
 
 function doPost(e) {
+  const lock = LockService.getScriptLock();
+
   try {
-    const lock = LockService.getScriptLock();
     lock.waitLock(10000);
 
     if (!e || !e.postData || !e.postData.contents) {
@@ -43,6 +37,15 @@ function doPost(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = getOrCreateOrdersSheet_(ss);
     const normalized = normalizeOrder_(order);
+
+    if (orderExists_(sheet, normalized.orderId)) {
+      return jsonResponse({
+        ok: true,
+        duplicate: true,
+        message: 'Pedido ya registrado anteriormente',
+        orderId: normalized.orderId
+      });
+    }
 
     sheet.appendRow([
       normalized.createdAt,
@@ -61,13 +64,13 @@ function doPost(e) {
       'Pedido recibido desde la web'
     ]);
 
+    formatLastRow_(sheet);
     sendCustomerEmail_(normalized);
     sendOwnerEmail_(normalized);
 
-    lock.releaseLock();
-
     return jsonResponse({
       ok: true,
+      duplicate: false,
       message: 'Pedido registrado correctamente',
       orderId: normalized.orderId
     });
@@ -77,6 +80,10 @@ function doPost(e) {
       ok: false,
       message: error.message || 'Error al registrar pedido'
     });
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (err) {}
   }
 }
 
@@ -118,6 +125,18 @@ function getOrCreateOrdersSheet_(ss) {
   }
 
   return sheet;
+}
+
+function orderExists_(sheet, orderId) {
+  if (!orderId || sheet.getLastRow() < 2) return false;
+  const values = sheet.getRange(2, 2, sheet.getLastRow() - 1, 1).getValues();
+  return values.some(row => String(row[0]) === String(orderId));
+}
+
+function formatLastRow_(sheet) {
+  const lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow, 1, 1, 14).setVerticalAlignment('middle');
+  sheet.autoResizeColumns(1, 14);
 }
 
 function normalizeOrder_(order) {
