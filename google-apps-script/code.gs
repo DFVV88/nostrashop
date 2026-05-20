@@ -1,13 +1,12 @@
 /*
   NostraShop Perú - Backend gratuito con Google Apps Script
   ---------------------------------------------------------
-  Qué hace este script:
+  Versión estable:
   1. Recibe pedidos desde la web por POST.
   2. Guarda el resumen del pedido en la hoja "Pedidos".
   3. Guarda cada producto en la hoja "DetalleProductos".
   4. Agrega costos referenciales, ganancia y margen para contabilidad básica.
-  5. Envía correo de confirmación profesional al cliente usando MailApp.
-  6. Envía correo de aviso al dueño de la tienda usando MailApp.
+  5. Envía correos simples con MailApp, como la versión que sí funcionaba.
 */
 
 const OWNER_EMAIL = 'fernandodaniel8888@gmail.com';
@@ -91,7 +90,6 @@ function doPost(e) {
 
   } catch (error) {
     console.error(error);
-
     return jsonResponse({
       ok: false,
       message: error.message || 'Error al registrar pedido'
@@ -107,11 +105,9 @@ function doPost(e) {
 function validateOrder(order) {
   if (!order) throw new Error('Pedido vacío.');
   if (!order.customer) throw new Error('Faltan datos del cliente.');
-
   if (!order.items || !Array.isArray(order.items) || order.items.length === 0) {
     throw new Error('El pedido no tiene productos.');
   }
-
   if (!order.totals) throw new Error('Faltan totales del pedido.');
 }
 
@@ -188,7 +184,6 @@ function appendProductDetails_(sheet, order) {
     const qty = Number(item.qty || 1);
     const price = Number(item.price || 0);
     const productInfo = getProductCostInfo_(item);
-
     const unitCost = productInfo.cost;
     const totalSale = qty * price;
     const totalCost = qty * unitCost;
@@ -218,19 +213,14 @@ function appendProductDetails_(sheet, order) {
   });
 
   if (rows.length > 0) {
-    sheet
-      .getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length)
-      .setValues(rows);
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
   }
 }
 
 function getProductCostInfo_(item) {
   const id = item.id || '';
   const name = item.name || '';
-
-  return PRODUCT_COSTS[id] ||
-         PRODUCT_COSTS_BY_NAME[name] ||
-         { cost: 0, supplier: 'Sin proveedor asignado' };
+  return PRODUCT_COSTS[id] || PRODUCT_COSTS_BY_NAME[name] || { cost: 0, supplier: 'Sin proveedor asignado' };
 }
 
 function formatOrdersLastRow_(sheet) {
@@ -278,7 +268,6 @@ function normalizeOrder_(order) {
     const qty = Number(item.qty || 1);
     const price = Number(item.price || 0);
     const productInfo = getProductCostInfo_(item);
-
     const lineTotal = price * qty;
     const lineCost = productInfo.cost * qty;
     const lineProfit = lineTotal - lineCost;
@@ -316,129 +305,28 @@ function normalizeOrder_(order) {
 function sendCustomerEmail_(order) {
   if (!order.email) return;
 
-  const subject = `Confirmación de pedido ${order.orderId} - ${STORE_NAME}`;
-
-  const customerItemsText = order.items.map((item, index) => {
-    const qty = Number(item.qty || 1);
-    const price = Number(item.price || 0);
-
-    return `${index + 1}. ${item.name || 'Producto'} x${qty} - S/ ${(price * qty).toFixed(2)}`;
-  }).join('\n');
-
-  const plainBody =
-    `Hola ${order.name || 'cliente'},\n\n` +
-    `Gracias por comprar en ${STORE_NAME}. Hemos recibido tu pedido.\n\n` +
+  const subject = `Pedido recibido ${order.orderId} - NostraShop Perú`;
+  const body = `Hola ${order.name || 'cliente'},\n\n` +
+    `Hemos recibido tu pedido en NostraShop Perú.\n\n` +
     `ID de pedido: ${order.orderId}\n` +
-    `Productos:\n${customerItemsText}\n` +
+    `Productos:\n${order.itemsText}\n` +
     `Total: S/ ${order.total.toFixed(2)}\n` +
     `Método de pago: ${order.payment}\n\n` +
-    `Datos de entrega:\n` +
+    `Tus datos de entrega:\n` +
     `Ciudad: ${order.city}\n` +
     `Dirección: ${order.address}\n` +
     `Celular: ${order.phone}\n\n` +
     `Siguiente paso: validaremos el pago y coordinaremos la preparación del pedido.\n\n` +
-    `${STORE_NAME}`;
+    `Gracias por comprar en NostraShop Perú.`;
 
-  const htmlBody = buildCustomerHtmlEmail_(order);
-
-  MailApp.sendEmail(order.email, subject, plainBody, {
-    name: STORE_NAME,
-    htmlBody: htmlBody,
-    replyTo: OWNER_EMAIL
-  });
-}
-
-function buildCustomerHtmlEmail_(order) {
-  const rows = order.items.map(item => {
-    const qty = Number(item.qty || 1);
-    const price = Number(item.price || 0);
-    const lineTotal = price * qty;
-
-    return `
-      <tr>
-        <td style="padding:12px;border-bottom:1px solid #e5e7eb;color:#111827;">
-          ${escapeHtml_(item.name || 'Producto')}
-        </td>
-        <td style="padding:12px;border-bottom:1px solid #e5e7eb;text-align:center;color:#111827;">
-          ${qty}
-        </td>
-        <td style="padding:12px;border-bottom:1px solid #e5e7eb;text-align:right;color:#111827;">
-          S/ ${lineTotal.toFixed(2)}
-        </td>
-      </tr>`;
-  }).join('');
-
-  return `
-  <div style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;color:#111827;">
-    <div style="max-width:620px;margin:0 auto;padding:24px;">
-      <div style="background:linear-gradient(135deg,#020617,#0f172a);border-radius:22px 22px 0 0;padding:28px;text-align:center;color:#ffffff;">
-        <div style="font-size:30px;font-weight:800;letter-spacing:-1px;">${STORE_NAME}</div>
-        <div style="margin-top:8px;color:#a5f3fc;font-size:14px;">Confirmación automática de pedido</div>
-      </div>
-
-      <div style="background:#ffffff;border-radius:0 0 22px 22px;padding:26px;border:1px solid #e5e7eb;border-top:0;">
-        <h2 style="margin:0 0 10px;font-size:22px;color:#111827;">¡Pedido recibido correctamente!</h2>
-
-        <p style="margin:0 0 18px;line-height:1.6;color:#374151;">
-          Hola <strong>${escapeHtml_(order.name || 'cliente')}</strong>, gracias por tu compra.
-          Hemos registrado tu pedido y pronto continuaremos con la validación del pago y la coordinación de entrega.
-        </p>
-
-        <div style="background:#ecfeff;border:1px solid #bae6fd;border-radius:16px;padding:16px;margin:18px 0;">
-          <div style="font-size:13px;color:#0369a1;font-weight:700;">ID DE PEDIDO</div>
-          <div style="font-size:20px;color:#0f172a;font-weight:800;margin-top:4px;">${escapeHtml_(order.orderId)}</div>
-        </div>
-
-        <table style="width:100%;border-collapse:collapse;margin:18px 0;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
-          <thead>
-            <tr style="background:#f9fafb;">
-              <th style="padding:12px;text-align:left;color:#374151;font-size:13px;">Producto</th>
-              <th style="padding:12px;text-align:center;color:#374151;font-size:13px;">Cant.</th>
-              <th style="padding:12px;text-align:right;color:#374151;font-size:13px;">Importe</th>
-            </tr>
-          </thead>
-          <tbody>${rows}</tbody>
-        </table>
-
-        <div style="text-align:right;margin-top:12px;">
-          <div style="color:#6b7280;font-size:14px;">Total del pedido</div>
-          <div style="font-size:26px;font-weight:900;color:#111827;">S/ ${order.total.toFixed(2)}</div>
-        </div>
-
-        <div style="margin-top:22px;padding:16px;border-radius:16px;background:#f9fafb;border:1px solid #e5e7eb;">
-          <div style="font-weight:800;margin-bottom:8px;color:#111827;">Datos de entrega</div>
-          <div style="line-height:1.7;color:#374151;font-size:14px;">
-            <strong>Ciudad:</strong> ${escapeHtml_(order.city)}<br>
-            <strong>Dirección:</strong> ${escapeHtml_(order.address)}<br>
-            <strong>Celular:</strong> ${escapeHtml_(order.phone)}<br>
-            <strong>Método de pago:</strong> ${escapeHtml_(order.payment)}
-          </div>
-        </div>
-
-        <p style="margin:22px 0 0;line-height:1.6;color:#6b7280;font-size:13px;">
-          Este correo fue generado automáticamente por ${STORE_NAME}. Si necesitas corregir algún dato, responde a este mismo correo.
-        </p>
-      </div>
-    </div>
-  </div>`;
-}
-
-function escapeHtml_(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
+  MailApp.sendEmail(order.email, subject, body);
 }
 
 function sendOwnerEmail_(order) {
   if (!OWNER_EMAIL) return;
 
   const subject = `Nueva venta web: ${order.orderId}`;
-
-  const body =
-    `Nuevo pedido recibido desde la web.\n\n` +
+  const body = `Nuevo pedido recibido desde la web.\n\n` +
     `ID: ${order.orderId}\n` +
     `Cliente: ${order.name}\n` +
     `Celular: ${order.phone}\n` +
@@ -453,9 +341,7 @@ function sendOwnerEmail_(order) {
     `Margen ref.: ${(order.marginPercent * 100).toFixed(2)}%\n\n` +
     `Estado inicial: Nuevo`;
 
-  MailApp.sendEmail(OWNER_EMAIL, subject, body, {
-    name: STORE_NAME
-  });
+  MailApp.sendEmail(OWNER_EMAIL, subject, body);
 }
 
 function jsonResponse(payload) {
@@ -468,10 +354,7 @@ function testEmail() {
   MailApp.sendEmail(
     OWNER_EMAIL,
     'Prueba de correo NostraShop',
-    'Si recibes este correo, MailApp está funcionando correctamente.',
-    {
-      name: STORE_NAME
-    }
+    'Si recibes este correo, MailApp está funcionando correctamente.'
   );
 }
 
@@ -486,18 +369,8 @@ function testPedidoCompleto() {
     address: 'Dirección de prueba',
     payment: 'link-pago',
     items: [
-      {
-        id: 'organizador-cocina-001',
-        name: 'Organizador plegable multiuso',
-        qty: 1,
-        price: 79
-      },
-      {
-        id: 'limpiador-electrico-002',
-        name: 'Cepillo limpiador eléctrico',
-        qty: 1,
-        price: 99
-      }
+      { id: 'organizador-cocina-001', name: 'Organizador plegable multiuso', qty: 1, price: 79 },
+      { id: 'limpiador-electrico-002', name: 'Cepillo limpiador eléctrico', qty: 1, price: 99 }
     ],
     itemsText:
       '1. Organizador plegable multiuso x1 - S/ 79.00\n' +
