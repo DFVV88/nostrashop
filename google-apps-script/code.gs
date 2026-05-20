@@ -3,15 +3,16 @@
   ---------------------------------------------------------
   Qué hace este script:
   1. Recibe pedidos desde la web por POST.
-  2. Crea automáticamente la hoja 'Pedidos' si no existe.
-  3. Guarda el pedido en Google Sheets.
-  4. Guarda todos los productos en una sola celda, separados por líneas.
+  2. Guarda el resumen del pedido en la hoja 'Pedidos'.
+  3. Guarda cada producto en una hoja separada llamada 'DetalleProductos'.
+  4. Permite ver precio unitario, cantidad y total por producto para mejor contabilidad.
   5. Envía correo de confirmación al cliente.
   6. Envía correo de aviso al dueño de la tienda.
 */
 
 const OWNER_EMAIL = 'fernandodaniel8888@gmail.com';
 const SHEET_NAME = 'Pedidos';
+const DETAIL_SHEET_NAME = 'DetalleProductos';
 
 function doGet() {
   return jsonResponse({
@@ -35,10 +36,11 @@ function doPost(e) {
     validateOrder(order);
 
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const sheet = getOrCreateOrdersSheet_(ss);
+    const ordersSheet = getOrCreateOrdersSheet_(ss);
+    const detailsSheet = getOrCreateDetailsSheet_(ss);
     const normalized = normalizeOrder_(order);
 
-    sheet.appendRow([
+    ordersSheet.appendRow([
       normalized.createdAt,
       normalized.orderId,
       normalized.name,
@@ -55,7 +57,11 @@ function doPost(e) {
       'Pedido recibido desde la web'
     ]);
 
-    formatLastRow_(sheet);
+    appendProductDetails_(detailsSheet, normalized);
+
+    formatOrdersLastRow_(ordersSheet);
+    formatDetailsSheet_(detailsSheet);
+
     sendCustomerEmail_(normalized);
     sendOwnerEmail_(normalized);
 
@@ -89,9 +95,7 @@ function validateOrder(order) {
 
 function getOrCreateOrdersSheet_(ss) {
   let sheet = ss.getSheetByName(SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(SHEET_NAME);
-  }
+  if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
 
   if (sheet.getLastRow() === 0) {
     sheet.appendRow([
@@ -118,14 +122,72 @@ function getOrCreateOrdersSheet_(ss) {
   return sheet;
 }
 
-function formatLastRow_(sheet) {
+function getOrCreateDetailsSheet_(ss) {
+  let sheet = ss.getSheetByName(DETAIL_SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(DETAIL_SHEET_NAME);
+
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow([
+      'Fecha',
+      'ID Pedido',
+      'Cliente',
+      'Celular',
+      'Correo',
+      'Producto',
+      'Cantidad',
+      'Precio unitario',
+      'Total producto',
+      'Método de pago',
+      'Estado'
+    ]);
+    sheet.getRange(1, 1, 1, 11).setFontWeight('bold');
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, 11);
+  }
+
+  return sheet;
+}
+
+function appendProductDetails_(sheet, order) {
+  const rows = order.items.map(item => {
+    const qty = Number(item.qty || 1);
+    const price = Number(item.price || 0);
+    return [
+      order.createdAt,
+      order.orderId,
+      order.name,
+      order.phone,
+      order.email,
+      item.name || 'Producto',
+      qty,
+      price,
+      qty * price,
+      order.payment,
+      'Nuevo'
+    ];
+  });
+
+  if (rows.length > 0) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+  }
+}
+
+function formatOrdersLastRow_(sheet) {
   const lastRow = sheet.getLastRow();
   sheet.getRange(lastRow, 1, 1, 14).setVerticalAlignment('middle');
-  sheet.getRange(lastRow, 9).setWrap(true); // Columna Productos
+  sheet.getRange(lastRow, 9).setWrap(true);
   sheet.setColumnWidth(9, 420);
   sheet.setColumnWidth(7, 230);
   sheet.autoResizeColumns(1, 8);
   sheet.autoResizeColumns(10, 5);
+}
+
+function formatDetailsSheet_(sheet) {
+  sheet.setColumnWidth(2, 150);
+  sheet.setColumnWidth(3, 220);
+  sheet.setColumnWidth(5, 230);
+  sheet.setColumnWidth(6, 260);
+  sheet.autoResizeColumns(1, 11);
 }
 
 function normalizeOrder_(order) {
@@ -150,6 +212,7 @@ function normalizeOrder_(order) {
     city: customer.city || '',
     address: customer.address || '',
     payment: customer.payment || '',
+    items,
     itemsText,
     productsCount: items.length,
     subtotal: Number(totals.subtotal || 0),
