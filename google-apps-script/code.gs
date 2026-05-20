@@ -5,8 +5,9 @@
   1. Recibe pedidos desde la web por POST.
   2. Crea automáticamente la hoja 'Pedidos' si no existe.
   3. Guarda el pedido en Google Sheets.
-  4. Envía correo de confirmación al cliente.
-  5. Envía correo de aviso al dueño de la tienda.
+  4. Guarda todos los productos en una sola celda, separados por líneas.
+  5. Envía correo de confirmación al cliente.
+  6. Envía correo de aviso al dueño de la tienda.
 */
 
 const OWNER_EMAIL = 'fernandodaniel8888@gmail.com';
@@ -21,8 +22,9 @@ function doGet() {
 }
 
 function doPost(e) {
+  const lock = LockService.getScriptLock();
+
   try {
-    const lock = LockService.getScriptLock();
     lock.waitLock(10000);
 
     if (!e || !e.postData || !e.postData.contents) {
@@ -53,15 +55,15 @@ function doPost(e) {
       'Pedido recibido desde la web'
     ]);
 
+    formatLastRow_(sheet);
     sendCustomerEmail_(normalized);
     sendOwnerEmail_(normalized);
-
-    lock.releaseLock();
 
     return jsonResponse({
       ok: true,
       message: 'Pedido registrado correctamente',
-      orderId: normalized.orderId
+      orderId: normalized.orderId,
+      productsCount: normalized.productsCount
     });
   } catch (error) {
     console.error(error);
@@ -69,6 +71,10 @@ function doPost(e) {
       ok: false,
       message: error.message || 'Error al registrar pedido'
     });
+  } finally {
+    try {
+      lock.releaseLock();
+    } catch (err) {}
   }
 }
 
@@ -112,16 +118,28 @@ function getOrCreateOrdersSheet_(ss) {
   return sheet;
 }
 
+function formatLastRow_(sheet) {
+  const lastRow = sheet.getLastRow();
+  sheet.getRange(lastRow, 1, 1, 14).setVerticalAlignment('middle');
+  sheet.getRange(lastRow, 9).setWrap(true); // Columna Productos
+  sheet.setColumnWidth(9, 420);
+  sheet.setColumnWidth(7, 230);
+  sheet.autoResizeColumns(1, 8);
+  sheet.autoResizeColumns(10, 5);
+}
+
 function normalizeOrder_(order) {
   const customer = order.customer || {};
   const totals = order.totals || {};
   const items = order.items || [];
-  const itemsText = items.map(item => {
+
+  const itemsText = items.map((item, index) => {
     const name = item.name || 'Producto';
     const qty = Number(item.qty || 1);
     const price = Number(item.price || 0);
-    return `${name} x${qty} - S/ ${(price * qty).toFixed(2)}`;
-  }).join(' | ');
+    const lineTotal = price * qty;
+    return `${index + 1}. ${name} x${qty} - S/ ${lineTotal.toFixed(2)}`;
+  }).join('\n');
 
   return {
     createdAt: order.createdAt ? new Date(order.createdAt) : new Date(),
@@ -133,6 +151,7 @@ function normalizeOrder_(order) {
     address: customer.address || '',
     payment: customer.payment || '',
     itemsText,
+    productsCount: items.length,
     subtotal: Number(totals.subtotal || 0),
     shipping: Number(totals.shipping || 0),
     total: Number(totals.total || 0)
@@ -146,7 +165,7 @@ function sendCustomerEmail_(order) {
   const body = `Hola ${order.name || 'cliente'},\n\n` +
     `Hemos recibido tu pedido en NostraShop Perú.\n\n` +
     `ID de pedido: ${order.orderId}\n` +
-    `Productos: ${order.itemsText}\n` +
+    `Productos:\n${order.itemsText}\n` +
     `Total: S/ ${order.total.toFixed(2)}\n` +
     `Método de pago: ${order.payment}\n\n` +
     `Tus datos de entrega:\n` +
@@ -171,7 +190,7 @@ function sendOwnerEmail_(order) {
     `Ciudad: ${order.city}\n` +
     `Dirección: ${order.address}\n` +
     `Pago: ${order.payment}\n` +
-    `Productos: ${order.itemsText}\n` +
+    `Productos:\n${order.itemsText}\n` +
     `Total: S/ ${order.total.toFixed(2)}\n\n` +
     `Estado inicial: Nuevo`;
 
